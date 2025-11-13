@@ -109,7 +109,7 @@
           const roles = Array.isArray(me.roles) ? me.roles : [];
           const isAdmin = roles.includes('ROLE_ADMIN') || roles.includes('ADMIN');
           if (!isAdmin) { globalThis.location.href = '/home.html'; return; }
-          (async()=>{ await loadCategories(); await loadBooks(); })();
+          (async()=>{ await loadCategories(); await loadBooks(); await loadAnuncios(); })();
         })
         .catch(() => { globalThis.location.href = '/login.html'; });
     })();
@@ -200,6 +200,56 @@
       }
     }
 
+    async function loadAnuncios(){
+      // cria seção se não existir
+      let section = document.getElementById('adminAnunciosSection');
+      if (!section){
+        section = document.createElement('section');
+        section.id = 'adminAnunciosSection';
+        section.innerHTML = `
+          <h2 style="margin:1.5rem 0 .5rem">Gerenciar Anúncios</h2>
+          <div id="anuncios" class="grid"></div>
+          <div id="anunciosEmpty" class="helper" style="display:none">Nenhum anúncio encontrado.</div>
+        `;
+        document.querySelector('main.auth-wrapper').appendChild(section);
+      }
+      const list = section.querySelector('#anuncios');
+      const empty = section.querySelector('#anunciosEmpty');
+      list.innerHTML = '';
+      const r = await getJson('/api/admin/anuncios');
+      if (r.status!==200 || !Array.isArray(r.body) || r.body.length===0){ empty.style.display='block'; return; }
+      empty.style.display='none';
+      for (const a of r.body){
+        const card = document.createElement('div');
+        card.className = 'card';
+        const img = a.imagemCapaUrl? `<img src="${a.imagemCapaUrl}" alt="Capa" style="width:100%;max-height:200px;object-fit:contain;border-radius:8px;margin-bottom:.5rem" onerror="this.style.display='none'" />` : '';
+        card.innerHTML = `
+          ${img}
+          <div class="book-title">${a.titulo}</div>
+          <div class="muted small">Vendedor: ${a.vendedorNome || a.vendedorEmail || '-'}</div>
+          <div class="muted small">Preço: R$ ${Number(a.preco).toFixed(2)}</div>
+          <div class="muted small">Qtd: ${a.quantidade}</div>
+          <div class="muted small">Status: ${a.status}</div>
+          <div class="row" style="margin-top:.5rem;justify-content:flex-end">
+            <button class="btn" data-del-anuncio="${a.id}">Excluir anúncio</button>
+          </div>
+        `;
+        list.appendChild(card);
+      }
+      for (const btn of list.querySelectorAll('[data-del-anuncio]')){
+        btn.addEventListener('click', async (e)=>{
+          e.preventDefault();
+          const id = btn.dataset.delAnuncio;
+          const confirmed = await confirmAction({ title:'Excluir anúncio?', text:'Esta ação não pode ser desfeita.', confirmButtonText:'Sim, excluir', cancelButtonText:'Cancelar' });
+          if (!confirmed) return;
+          const resp = await fetch('/api/admin/anuncios/'+id, { method:'DELETE', headers: authHeaders() });
+          if (resp.status===204){ toast('success','Anúncio excluído'); await loadAnuncios(); }
+          else if (resp.status===404){ await showWarn('Anúncio não encontrado'); }
+          else { await showError('Falha ao excluir anúncio'); }
+        });
+      }
+    }
+
     // Adicionar Livro
     document.getElementById('btnAddBook').addEventListener('click', async ()=>{
       if (!hasSwal) { alert('SweetAlert não carregado.'); return; }
@@ -230,7 +280,7 @@
             if (!isbn) { await showWarn('Informe o ISBN para detectar'); return; }
             const r = await getJson('/api/categorias/sugerir?isbn=' + encodeURIComponent(isbn));
             if (r.status===200 && r.body && r.body.id){
-              if (!categoriesCache.find(c=>String(c.id)===String(r.body.id))) categoriesCache.push(r.body);
+              if (!categoriesCache.some(c=>String(c.id)===String(r.body.id))) categoriesCache.push(r.body);
               const sel = document.getElementById('sw-categoria');
               if (sel){ sel.innerHTML = categoryOptionsHtml(r.body.id); sel.value = String(r.body.id); }
               toast('success','Categoria detectada: ' + r.body.nome);

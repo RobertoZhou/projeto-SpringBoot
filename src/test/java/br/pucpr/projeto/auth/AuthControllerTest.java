@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@SuppressWarnings("null")
 class AuthControllerTest {
 
     @Autowired
@@ -64,7 +65,8 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Email já registrado"));
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"))
+                .andExpect(jsonPath("$.message").value("Email já registrado"));
     }
 
     @Test
@@ -80,9 +82,10 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errors.nome").exists())
-                .andExpect(jsonPath("$.errors.email").value("Email inválido"))
-                .andExpect(jsonPath("$.errors.senha").exists());
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details.fields.nome").exists())
+                .andExpect(jsonPath("$.details.fields.email").value("Email inválido"))
+                .andExpect(jsonPath("$.details.fields.senha").exists());
     }
 
     @Test
@@ -122,6 +125,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(login))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("Credenciais inválidas"));
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"))
+                .andExpect(jsonPath("$.message").value("Credenciais inválidas"));
     }
 }

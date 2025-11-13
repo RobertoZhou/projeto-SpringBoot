@@ -170,6 +170,85 @@
       <pre id="outLivro">(sem envio)</pre>
     </div>
   </div>
+  <div class="row">
+    <div class="card">
+      <form id="formSugestaoCategoria">
+        <h2>Sugerir Categoria por ISBN</h2>
+        <fieldset>
+          <label>ISBN
+            <input name="isbn" maxlength="20" placeholder="978..." />
+          </label>
+        </fieldset>
+        <button type="submit">Sugerir</button>
+      </form>
+      <pre id="outSugestao">(sem envio)</pre>
+    </div>
+    <div class="card">
+      <h2>Marketplace (Público)</h2>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+        <button type="button" id="btnListAnuncios">Listar anúncios públicos</button>
+      </div>
+      <form id="formComprar">
+        <fieldset>
+          <label>ID do Anúncio
+            <input name="anuncioId" type="number" min="1" />
+          </label>
+          <label>Quantidade
+            <input name="quantidade" type="number" min="1" value="1" />
+          </label>
+        </fieldset>
+        <button type="submit">Comprar</button>
+      </form>
+      <pre id="outAnunciosPublicos">(aguardando)</pre>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <form id="formOnboardVender">
+        <h2>Vender (Onboarding + Criar anúncio)</h2>
+        <fieldset>
+          <label>ID do Livro
+            <input name="livroId" type="number" required />
+          </label>
+          <label>Preço
+            <input name="preco" type="number" step="0.01" required />
+          </label>
+          <label>Quantidade
+            <input name="quantidade" type="number" min="1" required />
+          </label>
+        </fieldset>
+        <button type="submit">Criar anúncio</button>
+      </form>
+      <pre id="outOnboard">(sem envio)</pre>
+    </div>
+    <div class="card">
+      <h2>Meus Anúncios (Seller)</h2>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+        <button type="button" id="btnListMeusAnuncios">Listar meus anúncios</button>
+      </div>
+      <div id="meusAnunciosLista" class="row"></div>
+      <pre id="outMeusAnuncios" style="display:none">(vazio)</pre>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <h2>Admin • Gerenciar Anúncios</h2>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+        <button type="button" id="btnAdminListAnuncios">Listar todos</button>
+      </div>
+      <form id="formAdminDelete">
+        <fieldset>
+          <label>ID do Anúncio
+            <input name="anuncioId" type="number" min="1" />
+          </label>
+        </fieldset>
+        <button type="submit">Apagar anúncio</button>
+      </form>
+      <pre id="outAdminAnuncios">(aguardando)</pre>
+    </div>
+  </div>
   <footer class="site-footer">Demo simples - Spring Boot + Fetch API</footer>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"></script>
@@ -280,17 +359,17 @@
     }
     function handleAddIsbnResponse(res){
       if (res.status === 200) {
-        if (window.ui) ui.success('Livro adicionado à coleção');
+  if (globalThis.ui) ui.success('Livro adicionado à coleção');
         formAddIsbn.isbn.value = '';
         return listarColecao();
       }
       if (res.status === 400) {
-        const msg = res.body && res.body.erro ? res.body.erro : '';
-        if (window.ui) ui.warn('Não foi possível adicionar', msg);
+  const msg = res.body && res.body.erro ? res.body.erro : '';
+  if (globalThis.ui) ui.warn('Não foi possível adicionar', msg);
         return;
       }
       if (res.status === 401) {
-        if (window.ui) ui.error('Não autorizado', 'Faça login e tente novamente');
+  if (globalThis.ui) ui.error('Não autorizado', 'Faça login e tente novamente');
       }
     }
 
@@ -299,13 +378,13 @@
       const data = Object.fromEntries(new FormData(formAddIsbn).entries());
       const isbn = (data.isbn || '').trim();
       if (isBlank(isbn)) {
-        if (window.ui) ui.warn('Informe o ISBN');
+  if (globalThis.ui) ui.warn('Informe o ISBN');
         return;
       }
-      if (!authToken) {
-        if (window.ui) ui.error('Você precisa estar logado');
-        return;
-      }
+        if (!authToken) {
+          if (globalThis.ui) ui.error('Você precisa estar logado');
+          return;
+        }
       try {
         const res = await addIsbn(isbn);
         await handleAddIsbnResponse(res);
@@ -325,7 +404,14 @@
           const card = document.createElement('div');
           card.className = 'card';
           const img = it.imagemCapaUrl ? `<img src="${it.imagemCapaUrl}" alt="Capa" style="width:100%;max-width:220px;max-height:260px;object-fit:contain;border-radius:8px;display:block;margin-bottom:.5rem" onerror="this.style.display='none'" />` : '';
-            const preco = (typeof it.preco === 'number') ? Number(it.preco) : (it.preco && it.preco.amount) ? Number(it.preco.amount) : it.preco;
+            let preco = null;
+            if (typeof it.preco === 'number') {
+              preco = Number(it.preco);
+            } else if (it.preco && it.preco.amount) {
+              preco = Number(it.preco.amount);
+            } else {
+              preco = it.preco;
+            }
             card.innerHTML = `
               ${img}
               <div class="book-title">${it.titulo||'-'}</div>
@@ -344,10 +430,11 @@
             const id = btn.dataset.del;
             const resp = await fetch('/api/colecao/' + id, { method: 'DELETE', headers: authHeaders() });
             if (resp.status === 200 || resp.status === 204) {
-              if (window.ui) ui.success('Removido da coleção');
+              if (globalThis.ui) ui.success('Removido da coleção');
               await listarColecao();
             } else {
-              if (window.ui) ui.warn('Não foi possível remover');
+              if (globalThis.ui) ui.warn('Não foi possível remover');
+              outColecao.textContent = 'Falha ao remover item da coleção';
             }
           });
         }
@@ -420,6 +507,130 @@
         formProfile.senhaAtual.value = '';
         formProfile.novaSenha.value = '';
       }
+    });
+
+    // Sugerir categoria por ISBN
+    const formSugestaoCategoria = document.getElementById('formSugestaoCategoria');
+    const outSugestao = document.getElementById('outSugestao');
+    formSugestaoCategoria.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      outSugestao.textContent = 'Consultando...';
+      const data = Object.fromEntries(new FormData(formSugestaoCategoria).entries());
+      const r = await getJson('/api/categorias/sugerir?isbn=' + encodeURIComponent(data.isbn || ''));
+      outSugestao.textContent = JSON.stringify(r, null, 2);
+    });
+
+    // Marketplace público
+    const btnListAnuncios = document.getElementById('btnListAnuncios');
+    const outAnunciosPublicos = document.getElementById('outAnunciosPublicos');
+    btnListAnuncios.addEventListener('click', async () => {
+      outAnunciosPublicos.textContent = 'Carregando anúncios...';
+      const r = await getJson('/api/anuncios');
+      outAnunciosPublicos.textContent = JSON.stringify(r, null, 2);
+    });
+    const formComprar = document.getElementById('formComprar');
+    formComprar.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!authToken) {
+        if (globalThis.ui) ui.error('Você precisa estar logado');
+        return;
+      }
+      const data = Object.fromEntries(new FormData(formComprar).entries());
+      const id = Number(data.anuncioId); const quantidade = Number(data.quantidade||1);
+      outAnunciosPublicos.textContent = 'Comprando...';
+      const r = await postJson(`/api/anuncios/${id}/comprar`, { quantidade });
+      outAnunciosPublicos.textContent = JSON.stringify(r, null, 2);
+  if (r.status === 200) { if (globalThis.ui) ui.success('Compra realizada'); }
+  if (r.status === 409) { if (globalThis.ui) ui.warn('Anúncio indisponível ou quantidade insuficiente'); }
+    });
+
+    // Onboarding + criar anúncio
+    const formOnboardVender = document.getElementById('formOnboardVender');
+    const outOnboard = document.getElementById('outOnboard');
+    formOnboardVender.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!authToken) {
+        if (globalThis.ui) ui.error('Você precisa estar logado');
+        return;
+      }
+      outOnboard.textContent = 'Enviando...';
+      const raw = Object.fromEntries(new FormData(formOnboardVender).entries());
+  raw.livroId = Number(raw.livroId); raw.preco = Number.parseFloat(raw.preco); raw.quantidade = Number(raw.quantidade);
+      const r = await postJson('/api/anuncios/onboard', raw);
+      outOnboard.textContent = JSON.stringify(r, null, 2);
+  if (r.status === 200 || r.status === 201) { if (globalThis.ui) ui.success('Anúncio criado'); }
+    });
+
+    // Meus anúncios (seller)
+    const btnListMeusAnuncios = document.getElementById('btnListMeusAnuncios');
+    const meusAnunciosLista = document.getElementById('meusAnunciosLista');
+    const outMeusAnuncios = document.getElementById('outMeusAnuncios');
+    async function listarMeusAnuncios(){
+      meusAnunciosLista.innerHTML = ''; outMeusAnuncios.style.display = 'block'; outMeusAnuncios.textContent = 'Carregando...';
+      const r = await getJson('/api/seller/anuncios');
+      if (r.status === 200 && Array.isArray(r.body)) {
+        outMeusAnuncios.style.display = 'none';
+        for (const it of r.body) {
+          const card = document.createElement('div'); card.className = 'card';
+          card.innerHTML = `
+            <div><strong>#${it.id}</strong> • ${it.livroTitulo||'-'} • ${it.status}</div>
+            <div class="muted small">Preço: R$ ${Number(it.preco).toFixed(2)} • Quantidade: ${it.quantidade}</div>
+            <div style="margin-top:.5rem;display:flex;gap:.5rem;justify-content:flex-end">
+              <button class="btn" data-status="ATIVO" data-id="${it.id}">ATIVAR</button>
+              <button class="btn" data-status="PAUSADO" data-id="${it.id}">PAUSAR</button>
+              <button class="btn" data-del="${it.id}">Apagar</button>
+            </div>
+          `;
+          meusAnunciosLista.appendChild(card);
+        }
+        for (const btn of meusAnunciosLista.querySelectorAll('[data-status]')) {
+          btn.addEventListener('click', async (e) => {
+            e.preventDefault(); const id = btn.dataset.id; const status = btn.dataset.status;
+            const resp = await fetch(`/api/seller/anuncios/${id}/status?valor=${encodeURIComponent(status)}`, { method: 'PATCH', headers: authHeaders() });
+            if (resp.status === 200 || resp.status === 204) {
+              if (globalThis.ui) ui.success('Status atualizado');
+              listarMeusAnuncios();
+            } else {
+              if (globalThis.ui) ui.warn('Falha ao atualizar status');
+              outMeusAnuncios.textContent = 'Falha ao atualizar status do anúncio';
+            }
+          });
+        }
+        for (const btn of meusAnunciosLista.querySelectorAll('[data-del]')) {
+          btn.addEventListener('click', async (e) => {
+            e.preventDefault(); const id = btn.dataset.del;
+            const resp = await fetch(`/api/seller/anuncios/${id}`, { method: 'DELETE', headers: authHeaders() });
+            if (resp.status === 200 || resp.status === 204) {
+              if (globalThis.ui) ui.success('Anúncio apagado');
+              listarMeusAnuncios();
+            } else {
+              if (globalThis.ui) ui.warn('Falha ao apagar');
+              outMeusAnuncios.textContent = 'Falha ao apagar anúncio';
+            }
+          });
+        }
+      } else {
+        outMeusAnuncios.style.display = 'block'; outMeusAnuncios.textContent = JSON.stringify(r, null, 2);
+      }
+    }
+    btnListMeusAnuncios.addEventListener('click', listarMeusAnuncios);
+
+    // Admin - anúncios
+    const btnAdminListAnuncios = document.getElementById('btnAdminListAnuncios');
+    const outAdminAnuncios = document.getElementById('outAdminAnuncios');
+    btnAdminListAnuncios.addEventListener('click', async () => {
+      outAdminAnuncios.textContent = 'Carregando (admin)...';
+      const r = await getJson('/api/admin/anuncios');
+      outAdminAnuncios.textContent = JSON.stringify(r, null, 2);
+    });
+    const formAdminDelete = document.getElementById('formAdminDelete');
+    formAdminDelete.addEventListener('submit', async (e) => {
+      e.preventDefault(); const data = Object.fromEntries(new FormData(formAdminDelete).entries());
+      const id = Number(data.anuncioId);
+      outAdminAnuncios.textContent = 'Apagando...';
+      const resp = await fetch(`/api/admin/anuncios/${id}`, { method: 'DELETE', headers: authHeaders() });
+      let bodyText; try { bodyText = await resp.json(); } catch { bodyText = await resp.text(); }
+      outAdminAnuncios.textContent = JSON.stringify({ status: resp.status, body: bodyText }, null, 2);
     });
   </script>
 </body>

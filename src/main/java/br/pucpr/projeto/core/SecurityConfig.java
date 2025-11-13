@@ -47,6 +47,12 @@ public class SecurityConfig {
             .requestMatchers(HttpMethod.POST, "/api/livros/**").hasRole("ADMIN")
             .requestMatchers(HttpMethod.PUT, "/api/livros/**").hasRole("ADMIN")
             .requestMatchers(HttpMethod.DELETE, "/api/livros/**").hasRole("ADMIN")
+            // Anúncios: leitura pública, compra autenticada (cai no authenticated padrão)
+            .requestMatchers(HttpMethod.GET, "/api/anuncios/**").permitAll()
+            // Onboarding de vendedor: autenticado
+            .requestMatchers(HttpMethod.POST, "/api/anuncios/onboard").authenticated()
+            // Área do vendedor
+            .requestMatchers("/api/seller/**").hasRole("SELLER")
             .requestMatchers("/api/admin/**").hasRole("ADMIN")
             .anyRequest().authenticated()
         )

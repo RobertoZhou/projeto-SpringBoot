@@ -71,6 +71,12 @@
       <div id="colecaoList" class="grid"></div>
     </section>
 
+    <section class="section">
+      <h2 style="margin:0 0 .5rem">Marketplace</h2>
+      <div id="marketEmpty" class="helper" style="display:none">Nenhum anúncio disponível no momento.</div>
+      <div id="marketList" class="grid"></div>
+    </section>
+
     <!-- Pop-up de Perfil agora renderizado via SweetAlert2 -->
 
     <div class="site-footer">© Alexandria • Construído com Spring Boot</div>
@@ -128,12 +134,17 @@
     ];
 
     let __isAdmin = false;
+    let __isSeller = false;
     async function loadUser() {
       const el = document.getElementById('userEmail');
       const r = await getJson('/api/auth/me');
       if (r.status === 200 && r.body) {
         el.textContent = r.body.email || '(sem email)';
-        try { __isAdmin = Array.isArray(r.body.roles) && r.body.roles.includes('ROLE_ADMIN'); } catch {}
+        try {
+          const roles = Array.isArray(r.body.roles) ? r.body.roles : [];
+          __isAdmin = roles.includes('ROLE_ADMIN');
+          __isSeller = roles.includes('ROLE_SELLER');
+        } catch {}
         if (globalThis.ui) ui.success('Bem-vindo(a), ' + (r.body.nome || r.body.email));
       } else {
         el.textContent = 'Não autenticado';
@@ -179,7 +190,7 @@
                 const msg = body && body.erro ? body.erro : 'Livro em uso e não pode ser removido.';
                 if (globalThis.ui) ui.warn(msg);
               } else {
-                if (globalThis.ui) { ui.warn('Falha ao remover livro'); }
+                if (globalThis.ui) ui.warn('Falha ao remover livro');
               }
             } catch {
               if (globalThis.ui) ui.error('Erro ao remover livro');
@@ -245,6 +256,8 @@
         card.className = 'card';
         const img = it.imagemCapaUrl ? `<img src="${it.imagemCapaUrl}" alt="Capa" style="width:100%;max-height:260px;object-fit:contain;border-radius:8px;margin-bottom:.5rem" onerror="this.style.display='none'" />` : '';
         const preco = (typeof it.preco === 'number') ? Number(it.preco) : (it.preco && it.preco.amount) ? Number(it.preco.amount) : it.preco;
+  // Sempre mostrar o botão de vender; se o usuário ainda não for SELLER, o endpoint fará a promoção automática
+  const sellerBtn = `<button class="btn" data-vender="${it.id}" data-livro-id="${it.livroId || it.id}" data-titulo="${(it.titulo||'').replace(/"/g,'&quot;')}">Vender</button>`;
         card.innerHTML = `
           ${img}
           <div class="book-title">${it.titulo || '-'}</div>
@@ -252,27 +265,129 @@
           <div class="muted small">ISBN: ${it.isbn || '-'}</div>
           <div class="muted small">Preço: ${preco ? ('R$ ' + Number(preco).toFixed(2)) : 'Fora de estoque'}</div>
           <div style="margin-top:.5rem;display:flex;gap:.5rem;justify-content:flex-end">
+            ${sellerBtn}
             <button class="btn btn-danger" data-del="${it.id}">Remover</button>
           </div>
         `;
         list.appendChild(card);
       }
       // Bind delete buttons
-      list.querySelectorAll('[data-del]').forEach(btn => {
+      for (const btn of list.querySelectorAll('[data-del]')) {
         btn.addEventListener('click', async (e) => {
           e.preventDefault();
-          const id = btn.getAttribute('data-del');
+          const id = btn.dataset.del;
           try {
             const resp = await fetch('/api/colecao/' + id, { method: 'DELETE', headers: authHeaders() });
             if (resp.status === 200 || resp.status === 204) {
-              if (window.ui) ui.success('Removido da coleção');
+              if (globalThis.ui) ui.success('Removido da coleção');
               await loadColecao();
-            } else {
-              if (window.ui) ui.warn('Não foi possível remover');
-            }
-          } catch { if (window.ui) ui.error('Erro ao remover'); }
+            } else if (globalThis.ui) ui.warn('Não foi possível remover');
+          } catch { if (globalThis.ui) ui.error('Erro ao remover'); }
         });
-      });
+      }
+      // Bind vender (qualquer autenticado)
+      for (const btn of list.querySelectorAll('[data-vender]')) {
+        btn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const livroId = btn.dataset.livroId;
+            const titulo = btn.dataset.titulo || 'Livro';
+            if (!globalThis.Swal) {
+              if (globalThis.ui) ui.warn('Recurso de anúncio requer SweetAlert2');
+              return;
+            }
+            const { value: formValues, isConfirmed } = await Swal.fire({
+              title: 'Vender ' + titulo,
+              html: `
+                <div class="row two" style="text-align:left">
+                  <div>
+                    <label>Preço</label>
+                    <input id="swal-preco" class="input" type="number" step="0.01" min="0" value="0" />
+                  </div>
+                  <div>
+                    <label>Quantidade</label>
+                    <input id="swal-quant" class="input" type="number" step="1" min="1" value="1" />
+                  </div>
+                </div>
+              `,
+              showCancelButton: true,
+              confirmButtonText: 'Vender',
+              cancelButtonText: 'Cancelar',
+              focusConfirm: false,
+              preConfirm: () => ({
+                preco: Number(document.getElementById('swal-preco').value || '0'),
+                quantidade: Number(document.getElementById('swal-quant').value || '1')
+              })
+            });
+            if (!isConfirmed) return;
+            const payload = { livroId: Number(livroId), preco: formValues.preco, quantidade: formValues.quantidade };
+            // Endpoint de onboarding: cria anúncio e promove para SELLER caso necessário
+            const r = await postJson('/api/anuncios/onboard', payload, 'POST');
+            if (r.status === 200) {
+              if (ui) ui.success('Anúncio criado! Se for seu primeiro anúncio, você agora é SELLER. Faça login novamente para ver os recursos de vendedor.');
+              await loadMarket();
+            } else if (ui) ui.warn('Não foi possível anunciar');
+          });
+      }
+    }
+
+    // Marketplace
+    function renderMarket(items){
+      const list = document.getElementById('marketList');
+      const empty = document.getElementById('marketEmpty');
+      list.innerHTML = '';
+      if (!Array.isArray(items) || items.length === 0) { empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+      for (const a of items){
+        const card = document.createElement('div');
+        card.className = 'card';
+        const img = a.imagemCapaUrl ? `<img src="${a.imagemCapaUrl}" alt="Capa" style="width:100%;max-height:220px;object-fit:contain;border-radius:8px;margin-bottom:.5rem" onerror="this.style.display='none'" />` : '';
+        card.innerHTML = `
+          ${img}
+          <div class="book-title">${a.titulo}</div>
+          <div class="book-author">${a.autor || ''}</div>
+          <div class="muted small">Vendedor: ${a.vendedorNome || a.vendedorEmail || '-'}</div>
+          <div class="muted small">Preço: R$ ${Number(a.preco).toFixed(2)}</div>
+          <div class="muted small">Disponível: ${a.quantidade}</div>
+          <div style="margin-top:.5rem;display:flex;gap:.5rem;justify-content:flex-end">
+            <button class="btn" data-buy="${a.id}">Comprar</button>
+          </div>
+        `;
+        list.appendChild(card);
+      }
+      // Bind comprar
+      for (const btn of list.querySelectorAll('[data-buy]')) {
+        btn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const id = Number(btn.getAttribute('data-buy'));
+          if (!globalThis.Swal) {
+            if (ui) ui.warn('Recurso de compra requer SweetAlert2');
+            return;
+          }
+          const { value: q, isConfirmed } = await Swal.fire({
+            title: 'Quantidade', input: 'number', inputValue: 1, inputAttributes: { min: 1, step: 1 }, showCancelButton: true,
+            confirmButtonText: 'Comprar', cancelButtonText: 'Cancelar'
+          });
+          if (!isConfirmed) return;
+          const qty = Number(q || 1);
+          const r = await postJson(`/api/anuncios/${id}/comprar`, { quantidade: qty }, 'POST');
+          if (r.status === 200) {
+            if (ui) ui.success('Compra realizada');
+            await loadMarket();
+          } else if (r.status === 409) {
+            if (ui) ui.warn('Quantidade indisponível ou anúncio indisponível');
+          } else if (r.status === 422) {
+            if (ui) ui.warn('Dados inválidos para compra');
+          } else if (ui) ui.warn('Não foi possível completar a compra');
+        });
+      }
+    }
+
+    async function loadMarket(){
+      try {
+        const r = await getJson('/api/anuncios');
+        if (r.status === 200) { renderMarket(r.body); }
+        else { renderMarket([]); }
+      } catch { renderMarket([]); }
     }
 
     async function loadColecao() {
@@ -401,7 +516,7 @@
 
     // Bootstrap
     loadUser();
-    (async ()=>{ await loadCategories(); await loadBooks(); })();
+  (async ()=>{ await loadCategories(); await loadBooks(); await loadMarket(); })();
     loadColecao();
 
     // Handler: adicionar por ISBN
@@ -409,7 +524,10 @@
       e.preventDefault();
       const input = document.getElementById('isbnHome');
       const isbn = String(input.value||'').trim();
-      if (!isbn) { if (window.ui) ui.warn('Informe o ISBN'); return; }
+      if (!isbn) {
+        if (globalThis.ui) ui.warn('Informe o ISBN');
+        return;
+      }
       try {
         const r = await postJson('/api/colecao/add', { isbn });
         if (r.status === 200) {
@@ -423,7 +541,7 @@
           if (globalThis.ui) ui.error('Não autorizado', 'Faça login e tente novamente');
         }
       } catch (err) {
-        if (window.ui) ui.error('Erro inesperado', String(err));
+        if (globalThis.ui) ui.error('Erro inesperado', String(err));
       }
     });
 

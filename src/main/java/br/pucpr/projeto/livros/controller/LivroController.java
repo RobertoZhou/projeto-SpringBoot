@@ -70,7 +70,7 @@ public class LivroController {
         // valida mudança de ISBN
         if (request.isbn() != null && !request.isbn().isBlank()) {
             var novoIsbn = request.isbn();
-            var isbnAlterou = (livro.getIsbn() == null) || !livro.getIsbn().equalsIgnoreCase(novoIsbn);
+            boolean isbnAlterou = (livro.getIsbn() == null) || !livro.getIsbn().equalsIgnoreCase(novoIsbn);
             if (isbnAlterou && livros.existsByIsbn(novoIsbn)) {
                 return ResponseEntity.status(409).build();
             }

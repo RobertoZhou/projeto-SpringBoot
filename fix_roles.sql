@@ -15,6 +15,10 @@ SELECT id, 'USER' FROM users;
 INSERT INTO user_roles (user_id, role)
 SELECT id, 'ADMIN' FROM users WHERE email = 'admin123@gmail.com';
 
+-- Opcional: tornar o admin também SELLER para testar o marketplace
+INSERT INTO user_roles (user_id, role)
+SELECT id, 'SELLER' FROM users WHERE email = 'admin123@gmail.com';
+
 -- Reabilitar safe mode
 SET SQL_SAFE_UPDATES = 1;
 
