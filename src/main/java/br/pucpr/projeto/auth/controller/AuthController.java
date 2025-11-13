@@ -7,11 +7,11 @@ import br.pucpr.projeto.auth.dto.AuthTokenResponse;
 import br.pucpr.projeto.auth.dto.UpdateProfileRequest;
 import br.pucpr.projeto.auth.dto.UpdateProfileResponse;
 import br.pucpr.projeto.auth.service.UserService;
+import br.pucpr.projeto.core.jwt.JwtTokenProvider;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -19,9 +19,11 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final UserService userService;
+    private final JwtTokenProvider jwtTokenProvider;
 
-    public AuthController(UserService userService) {
+    public AuthController(UserService userService, JwtTokenProvider jwtTokenProvider) {
         this.userService = userService;
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     @PostMapping("/register")
@@ -36,26 +38,43 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<?> me(@AuthenticationPrincipal UserDetails user) {
-        if (user == null) return ResponseEntity.status(401).build();
+    public ResponseEntity<?> me(Authentication auth, @org.springframework.web.bind.annotation.RequestHeader(value = org.springframework.http.HttpHeaders.AUTHORIZATION, required = false) String authHeader) {
+        if (auth == null || !auth.isAuthenticated()) {
+            // Fallback: usa SecurityContext explicitamente (alguns resolvers podem não injetar Authentication)
+            var ctxAuth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (ctxAuth == null || !ctxAuth.isAuthenticated()) {
+                // Como último recurso, tenta parsear o token do header Authorization (se presente)
+                if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                    try {
+                        var data = jwtTokenProvider.parse(authHeader.substring(7));
+                        return ResponseEntity.ok(java.util.Map.of(
+                                "email", data.email(),
+                                "roles", data.roles().stream().map(r -> r.startsWith("ROLE_") ? r : ("ROLE_" + r)).toList()
+                        ));
+                    } catch (Exception ignored) { }
+                }
+                return ResponseEntity.status(401).build();
+            }
+            auth = ctxAuth;
+        }
         return ResponseEntity.ok(java.util.Map.of(
-                "email", user.getUsername(),
-                "roles", user.getAuthorities().stream().map(a -> a.getAuthority()).toList()
+                "email", auth.getName(),
+                "roles", auth.getAuthorities().stream().map(a -> a.getAuthority()).toList()
         ));
     }
 
     @GetMapping("/profile")
-    public ResponseEntity<UpdateProfileResponse> getProfile(@AuthenticationPrincipal UserDetails user) {
-        if (user == null) return ResponseEntity.status(401).build();
-        var profile = userService.getProfileByEmail(user.getUsername());
+    public ResponseEntity<UpdateProfileResponse> getProfile(Authentication auth) {
+        if (auth == null || !auth.isAuthenticated()) return ResponseEntity.status(401).build();
+        var profile = userService.getProfileByEmail(auth.getName());
         return ResponseEntity.ok(profile);
     }
 
     @PutMapping("/profile")
-    public ResponseEntity<UpdateProfileResponse> updateProfile(@AuthenticationPrincipal UserDetails user,
+    public ResponseEntity<UpdateProfileResponse> updateProfile(Authentication auth,
                                                                @Valid @RequestBody UpdateProfileRequest req) {
-        if (user == null) return ResponseEntity.status(401).build();
-        var profile = userService.updateProfile(user.getUsername(), req);
+        if (auth == null || !auth.isAuthenticated()) return ResponseEntity.status(401).build();
+        var profile = userService.updateProfile(auth.getName(), req);
         return ResponseEntity.ok(profile);
     }
 }

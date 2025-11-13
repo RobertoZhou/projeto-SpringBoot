@@ -4,6 +4,7 @@ import br.pucpr.projeto.livros.dto.CategoriaRequest;
 import br.pucpr.projeto.livros.dto.CategoriaResponse;
 import br.pucpr.projeto.livros.model.Categoria;
 import br.pucpr.projeto.livros.repository.CategoriaRepository;
+import br.pucpr.projeto.livros.service.CategorySuggestionService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,8 +17,11 @@ import java.util.List;
 public class CategoriaController {
 
     private final CategoriaRepository repo;
+    private final CategorySuggestionService suggestion;
 
-    public CategoriaController(CategoriaRepository repo) { this.repo = repo; }
+    public CategoriaController(CategoriaRepository repo, CategorySuggestionService suggestion) {
+        this.repo = repo; this.suggestion = suggestion;
+    }
 
     @GetMapping
     public List<CategoriaResponse> list() {
@@ -53,5 +57,11 @@ public class CategoriaController {
         if (!repo.existsById(id)) return ResponseEntity.notFound().build();
         repo.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/sugerir")
+    public ResponseEntity<CategoriaResponse> suggestByIsbn(@RequestParam("isbn") String isbn) {
+        var categoria = suggestion.suggestOrCreateByIsbn(isbn);
+        return ResponseEntity.ok(new CategoriaResponse(categoria.getId(), categoria.getNome()));
     }
 }

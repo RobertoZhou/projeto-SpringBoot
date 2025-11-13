@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Teste de Autenticação - Alexandria</title>
+  <style>
+    body { font-family: system-ui; padding: 2rem; max-width: 800px; margin: 0 auto; }
+    .info { background: #e3f2fd; border: 1px solid #2196f3; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
+    .error { background: #ffebee; border: 1px solid #f44336; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
+    .success { background: #e8f5e9; border: 1px solid #4caf50; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
+    button { padding: 0.75rem 1.5rem; margin: 0.5rem; cursor: pointer; border: none; border-radius: 4px; background: #2196f3; color: white; font-size: 1rem; }
+    button:hover { background: #1976d2; }
+    pre { background: #f5f5f5; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+    .token { word-break: break-all; font-family: monospace; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <h1>🔐 Teste de Autenticação</h1>
+  
+  <div class="info">
+    <strong>Token no localStorage:</strong>
+    <div id="tokenDisplay" class="token">Verificando...</div>
+  </div>
+
+  <div>
+    <button onclick="testAuth()">Testar /api/debug/auth</button>
+    <button onclick="testMe()">Testar /api/auth/me</button>
+    <button onclick="clearToken()">Limpar Token</button>
+    <button onclick="location.href='/login.html'">Ir para Login</button>
+  </div>
+
+  <div id="result"></div>
+
+  <script>
+    function displayToken() {
+      const token = localStorage.getItem('auth.token');
+      const display = document.getElementById('tokenDisplay');
+      if (token) {
+        display.textContent = token.substring(0, 50) + '...' + token.substring(token.length - 20);
+        display.style.color = 'green';
+      } else {
+        display.textContent = 'NENHUM TOKEN ENCONTRADO';
+        display.style.color = 'red';
+      }
+    }
+
+    function showResult(title, data, isError = false) {
+      const resultDiv = document.getElementById('result');
+      resultDiv.className = isError ? 'error' : 'success';
+      resultDiv.innerHTML = `
+        <strong>${title}</strong>
+        <pre>${JSON.stringify(data, null, 2)}</pre>
+      `;
+    }
+
+    async function testAuth() {
+      const token = localStorage.getItem('auth.token');
+      if (!token) {
+        showResult('❌ Erro', { message: 'Nenhum token encontrado. Faça login primeiro.' }, true);
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/debug/auth', {
+          headers: {
+            'Authorization': 'Bearer ' + token
+          }
+        });
+        const data = await response.json();
+        
+        if (response.ok) {
+          showResult('✅ /api/debug/auth', data);
+        } else {
+          showResult('❌ Erro ' + response.status, data, true);
+        }
+      } catch (err) {
+        showResult('❌ Erro de Rede', { error: err.message }, true);
+      }
+    }
+
+    async function testMe() {
+      const token = localStorage.getItem('auth.token');
+      if (!token) {
+        showResult('❌ Erro', { message: 'Nenhum token encontrado. Faça login primeiro.' }, true);
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/auth/me', {
+          headers: {
+            'Authorization': 'Bearer ' + token
+          }
+        });
+        const data = await response.json();
+        
+        if (response.ok) {
+          showResult('✅ /api/auth/me', data);
+        } else {
+          showResult('❌ Erro ' + response.status, data, true);
+        }
+      } catch (err) {
+        showResult('❌ Erro de Rede', { error: err.message }, true);
+      }
+    }
+
+    function clearToken() {
+      localStorage.removeItem('auth.token');
+      displayToken();
+      showResult('🗑️ Token Removido', { message: 'Token foi removido do localStorage. Faça login novamente.' });
+    }
+
+    // Inicializar
+    displayToken();
+  </script>
+</body>
+</html>

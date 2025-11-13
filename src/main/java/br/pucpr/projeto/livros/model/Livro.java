@@ -4,7 +4,9 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "livros")
+@Table(name = "livros", uniqueConstraints = {
+    @UniqueConstraint(name = "uk_livros_isbn", columnNames = "isbn")
+})
 public class Livro {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -21,7 +23,7 @@ public class Livro {
     @Column(precision = 12, scale = 2, nullable = false)
     private BigDecimal preco;
 
-    @Column(length = 13)
+    @Column(length = 13, unique = true)
     private String isbn;
 
     @Column(name = "imagem_capa_url", length = 600)

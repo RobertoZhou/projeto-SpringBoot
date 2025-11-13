@@ -7,10 +7,12 @@ import br.pucpr.projeto.livros.repository.ColecaoItemRepository;
 import br.pucpr.projeto.livros.repository.LivroRepository;
 import br.pucpr.projeto.livros.repository.CategoriaRepository;
 import jakarta.transaction.Transactional;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class ColecaoService {
@@ -72,5 +74,32 @@ public class ColecaoService {
         var it = colecao.findById(itemId).orElseThrow(() -> new IllegalArgumentException("Item não encontrado"));
         if (!it.getUsuario().getId().equals(user.getId())) throw new IllegalArgumentException("Você não pode remover este item");
         colecao.delete(it);
+    }
+
+    // Método temporário para debug da integração Amazon
+    public ResponseEntity<Object> debugAmazonIntegration(String isbn) {
+        try {
+            var info = lookup.lookupByIsbn(isbn);
+            var price = priceService.getAmazonBrPrice(isbn);
+            
+            return ResponseEntity.ok(Map.of(
+                "isbn", isbn,
+                "bookInfo", info != null ? Map.of(
+                    "titulo", info.titulo(),
+                    "autor", info.autor(),
+                    "editora", info.editora(),
+                    "capa", info.capa(),
+                    "descricao", info.descricao(),
+                    "anoPublicacao", info.anoPublicacao()
+                ) : "null",
+                "price", price.orElse(null),
+                "priceFormatted", price.map(priceService::formatBR).orElse("N/A")
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of(
+                "error", e.getMessage(),
+                "isbn", isbn
+            ));
+        }
     }
 }

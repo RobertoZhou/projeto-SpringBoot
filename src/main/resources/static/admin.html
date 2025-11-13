@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/alexandria.css" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <style>
     body{font-family:'Montserrat', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;}
     .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));}
@@ -30,6 +31,7 @@
         <a class="btn" href="/index.html">Demo</a>
       </div>
       <div class="row">
+        <button id="btnAddBook" class="btn">Adicionar Livro</button>
         <button id="btnDeleteAll" class="btn">Excluir TODOS os livros</button>
       </div>
     </div>
@@ -42,17 +44,58 @@
   </main>
 
   <script>
+    // SweetAlert helpers
+    const hasSwal = typeof globalThis !== 'undefined' && !!globalThis.Swal;
+    const Toast = hasSwal ? Swal.mixin({
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 2500,
+      timerProgressBar: true
+    }) : null;
+    const toast = (icon, title) => { if (Toast) Toast.fire({ icon, title }); else alert(title); };
+    const showError = async (title, text) => { if (hasSwal) { await Swal.fire({ icon:'error', title, ...(text?{text}: {}) }); } else { alert(text ? `${title}: ${text}` : title); } };
+    const showWarn = async (title, text) => { if (hasSwal) { await Swal.fire({ icon:'warning', title, ...(text?{text}: {}) }); } else { alert(text ? `${title}: ${text}` : title); } };
+    const confirmAction = async ({ title, text, confirmButtonText='Confirmar', cancelButtonText='Cancelar' }) => {
+      if (hasSwal) {
+        const r = await Swal.fire({ title, text, icon:'warning', showCancelButton:true, confirmButtonText, cancelButtonText });
+        return r.isConfirmed;
+      }
+      return confirm(title + (text ? ('\n' + text) : ''));
+    };
+    let categoriesCache = [];
+    async function loadCategories(){
+      const r = await getJson('/api/categorias');
+      if (r.status===200 && Array.isArray(r.body)) categoriesCache = r.body;
+      else categoriesCache = [];
+    }
+    function categoryOptionsHtml(selectedId){
+      return categoriesCache.map(c => `<option value="${c.id}" ${String(c.id)===String(selectedId)?'selected':''}>${c.nome}</option>`).join('');
+    }
+
     function authHeaders(extra={}) {
       const t = localStorage.getItem('auth.token');
       return { ...(t ? { 'Authorization': 'Bearer ' + t } : {}), ...extra };
     }
     async function getJson(url) {
       const resp = await fetch(url, { headers: authHeaders() });
+      if (resp.status === 401 || resp.status === 403) {
+        localStorage.removeItem('auth.token');
+        await showWarn('Acesso negado', 'Sessão expirada ou sem permissão. Faça login novamente.');
+        setTimeout(() => { globalThis.location.href = '/login.html'; }, 500);
+        return { status: resp.status, body: null };
+      }
       let body; try { body = await resp.json(); } catch { body = await resp.text(); }
       return { status: resp.status, body };
     }
     async function sendJson(url, data, method='POST') {
       const resp = await fetch(url, { method, headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(data) });
+      if (resp.status === 401 || resp.status === 403) {
+        localStorage.removeItem('auth.token');
+        await showWarn('Acesso negado', 'Sessão expirada ou sem permissão. Faça login novamente.');
+        setTimeout(() => { globalThis.location.href = '/login.html'; }, 500);
+        return { status: resp.status, body: null };
+      }
       let body; try { body = await resp.json(); } catch { body = await resp.text(); }
       return { status: resp.status, body };
     }
@@ -66,7 +109,7 @@
           const roles = Array.isArray(me.roles) ? me.roles : [];
           const isAdmin = roles.includes('ROLE_ADMIN') || roles.includes('ADMIN');
           if (!isAdmin) { globalThis.location.href = '/home.html'; return; }
-          loadBooks();
+          (async()=>{ await loadCategories(); await loadBooks(); })();
         })
         .catch(() => { globalThis.location.href = '/login.html'; });
     })();
@@ -92,7 +135,10 @@
             <input class="input" name="autor" placeholder="Autor" value="${b.autor||''}" />
             <input class="input" name="isbn" placeholder="ISBN" value="${b.isbn||''}" />
             <input class="input" name="imagemCapaUrl" placeholder="URL da capa" value="${b.imagemCapaUrl||''}" />
-            <input class="input" name="categoriaId" placeholder="Categoria Id" type="number" value="${b.categoriaId||''}" />
+            <div class="row" style="width:100%">
+              <select class="input" name="categoriaId" style="flex:1">${categoryOptionsHtml(b.categoriaId)}</select>
+              <button class="btn" data-detect="${b.id}">Detectar</button>
+            </div>
             <input class="input" name="preco" placeholder="Preço" type="number" step="0.01" value="${b.preco||''}" />
           </div>
           <div class="row" style="margin-top:.5rem;justify-content:flex-end">
@@ -107,29 +153,130 @@
           e.preventDefault();
           const id = btn.dataset.save;
           const card = btn.closest('.card');
-          const data = Object.fromEntries([...card.querySelectorAll('input')].map(i=>[i.name, i.type==='number'? Number(i.value): i.value]));
+          const inputs = [...card.querySelectorAll('input')];
+          const data = Object.fromEntries(inputs.map(i=>[i.name, i.type==='number'? Number(i.value): i.value]));
+          const catSel = card.querySelector('select[name="categoriaId"]');
+          if (catSel) data.categoriaId = Number(catSel.value);
           const res = await sendJson('/api/admin/livros/'+id, data, 'PUT');
-          if (res.status===200){ alert('Salvo'); await loadBooks(); } else { alert('Falha ao salvar'); }
+          if (res.status===200){ toast('success','Livro salvo'); await loadBooks(); }
+          else if (res.status===409){
+            const msg = (res.body && (res.body.message||res.body.error)) || 'ISBN duplicado';
+            await showError('Não foi possível salvar', msg);
+          } else {
+            await showError('Falha ao salvar');
+          }
+        });
+      }
+      for (const btn of container.querySelectorAll('[data-detect]')){
+        btn.addEventListener('click', async (e)=>{
+          e.preventDefault();
+          const card = btn.closest('.card');
+          const isbn = (card.querySelector('input[name="isbn"]').value || '').trim();
+          if (!isbn) { await showWarn('Informe o ISBN para detectar'); return; }
+          const r2 = await getJson('/api/categorias/sugerir?isbn=' + encodeURIComponent(isbn));
+          if (r2.status===200 && r2.body && r2.body.id){
+            // garante cache
+            if (!categoriesCache.find(c=>String(c.id)===String(r2.body.id))) categoriesCache.push(r2.body);
+            const sel = card.querySelector('select[name="categoriaId"]');
+            if (sel) sel.value = String(r2.body.id);
+            toast('success','Categoria detectada: ' + r2.body.nome);
+          } else {
+            await showWarn('Não foi possível detectar a categoria automaticamente');
+          }
         });
       }
       for (const btn of container.querySelectorAll('[data-del]')){
         btn.addEventListener('click', async (e)=>{
           e.preventDefault();
           const id = btn.dataset.del;
+          const confirmed = await confirmAction({ title:'Excluir livro?', text:'Esta ação não pode ser desfeita.', confirmButtonText:'Sim, excluir', cancelButtonText:'Cancelar' });
+          if (!confirmed) return;
           const url = '/api/admin/livros/'+id+'?force=true';
           const resp = await fetch(url, { method:'DELETE', headers: authHeaders() });
-          if (resp.status===204){ alert('Excluído'); await loadBooks(); }
-          else if (resp.status===409){ alert('Livro em uso. Use exclusão forçada.'); }
-          else { alert('Falha ao excluir'); }
+          if (resp.status===204){ toast('success','Livro excluído'); await loadBooks(); }
+          else if (resp.status===409){ await showError('Livro em uso', 'Use exclusão forçada.'); }
+          else { await showError('Falha ao excluir'); }
         });
       }
     }
 
+    // Adicionar Livro
+    document.getElementById('btnAddBook').addEventListener('click', async ()=>{
+      if (!hasSwal) { alert('SweetAlert não carregado.'); return; }
+      const options = categoryOptionsHtml('');
+      const { value: formValues, isConfirmed } = await Swal.fire({
+        title: 'Adicionar Livro',
+        html: `
+          <div class="row" style="flex-direction:column;gap:.5rem">
+            <input id="sw-titulo" class="swal2-input" placeholder="Título" />
+            <input id="sw-autor" class="swal2-input" placeholder="Autor" />
+            <input id="sw-isbn" class="swal2-input" placeholder="ISBN" />
+            <input id="sw-imagem" class="swal2-input" placeholder="URL da capa (opcional)" />
+            <div style="display:flex;gap:.5rem;align-items:center;">
+              <select id="sw-categoria" class="swal2-select" style="flex:1">${options}</select>
+              <button type="button" id="sw-detectar" class="swal2-confirm swal2-styled" style="background:#888">Detectar</button>
+            </div>
+            <input id="sw-preco" type="number" step="0.01" class="swal2-input" placeholder="Preço (opcional)" />
+          </div>
+        `,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Salvar',
+        cancelButtonText: 'Cancelar',
+        didOpen: () => {
+          const btn = document.getElementById('sw-detectar');
+          btn?.addEventListener('click', async ()=>{
+            const isbn = (document.getElementById('sw-isbn').value||'').trim();
+            if (!isbn) { await showWarn('Informe o ISBN para detectar'); return; }
+            const r = await getJson('/api/categorias/sugerir?isbn=' + encodeURIComponent(isbn));
+            if (r.status===200 && r.body && r.body.id){
+              if (!categoriesCache.find(c=>String(c.id)===String(r.body.id))) categoriesCache.push(r.body);
+              const sel = document.getElementById('sw-categoria');
+              if (sel){ sel.innerHTML = categoryOptionsHtml(r.body.id); sel.value = String(r.body.id); }
+              toast('success','Categoria detectada: ' + r.body.nome);
+            } else {
+              await showWarn('Não foi possível detectar a categoria automaticamente');
+            }
+          });
+        },
+        preConfirm: () => {
+          const titulo = document.getElementById('sw-titulo').value.trim();
+          const autor = document.getElementById('sw-autor').value.trim();
+          const isbn = document.getElementById('sw-isbn').value.trim();
+          const imagemCapaUrl = document.getElementById('sw-imagem').value.trim();
+          const categoriaIdStr = document.getElementById('sw-categoria').value.trim();
+          const precoStr = document.getElementById('sw-preco').value.trim();
+          if (!titulo || !autor || !isbn) {
+            Swal.showValidationMessage('Título, Autor e ISBN são obrigatórios');
+            return false;
+          }
+          const categoriaId = categoriaIdStr ? Number(categoriaIdStr) : null;
+          const preco = precoStr ? Number(precoStr) : null;
+          return { titulo, autor, isbn, imagemCapaUrl: imagemCapaUrl || null, categoriaId, preco };
+        }
+      });
+      if (!isConfirmed || !formValues) return;
+  // POST deve ser em /api/livros (controller público com escrita protegida por ADMIN)
+  const res = await sendJson('/api/livros', formValues, 'POST');
+      if (res.status===201 || res.status===200){ toast('success','Livro criado'); await loadBooks(); }
+      else if (res.status===409){
+        const msg = (res.body && (res.body.message||res.body.error)) || 'ISBN duplicado';
+        await showError('Não foi possível criar', msg);
+      } else if (res.status===422){
+        const msg = (res.body && (res.body.message||res.body.error)) || 'Categoria inválida';
+        await showError('Dados inválidos', msg);
+      } else {
+        await showError('Falha ao criar livro');
+      }
+    });
+
+    // Excluir todos os livros
     document.getElementById('btnDeleteAll').addEventListener('click', async ()=>{
-      if (!confirm('Tem certeza que deseja excluir TODOS os livros? Esta ação é irreversível.')) return;
+      const confirmed = await confirmAction({ title:'Excluir TODOS os livros?', text:'Esta ação é irreversível.', confirmButtonText:'Sim, excluir', cancelButtonText:'Cancelar' });
+      if (!confirmed) return;
       const resp = await fetch('/api/admin/livros?force=true', { method:'DELETE', headers: authHeaders() });
-      if (resp.status===204){ alert('Todos os livros foram excluídos'); await loadBooks(); }
-      else { alert('Falha ao excluir em massa'); }
+      if (resp.status===204){ toast('success','Todos os livros foram excluídos'); await loadBooks(); }
+      else { await showError('Falha ao excluir em massa'); }
     });
 
   // carregamento inicial feito no guard acima

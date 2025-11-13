@@ -43,6 +43,8 @@
         </div>
         <div class="card-footer small">
           Ainda não possui conta? <a class="link" href="/register.html">Crie uma conta</a>
+          <br><br>
+          <button id="btnClearStorage" class="btn-secondary" type="button" style="font-size:0.8rem;padding:0.5rem">🔄 Limpar cache e fazer novo login</button>
         </div>
       </section>
 
@@ -61,6 +63,14 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"></script>
   <script src="/js/ui.js"></script>
   <script>
+    // Limpar storage antigo ao carregar a página
+    document.getElementById('btnClearStorage')?.addEventListener('click', () => {
+      localStorage.clear();
+      sessionStorage.clear();
+      if (window.ui) ui.success('Cache limpo! Faça login novamente.');
+      else alert('Cache limpo! Faça login novamente.');
+    });
+
     const alertLogin = document.getElementById('alertLogin');
     function showAlert(msg, ok=false) {
       alertLogin.textContent = msg;

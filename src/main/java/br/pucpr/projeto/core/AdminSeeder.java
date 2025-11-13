@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class AdminSeeder implements CommandLineRunner {
-    private static final String ROLE_ADMIN = "ROLE_ADMIN";
+    private static final String ROLE_ADMIN = "ADMIN";
     private final UserRepository users;
     private final PasswordEncoder encoder;
 

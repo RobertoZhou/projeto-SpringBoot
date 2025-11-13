@@ -38,7 +38,7 @@ public class User {
         this.email = email.toLowerCase();
         this.senhaHash = senhaHash;
         this.criadoEm = LocalDateTime.now();
-        this.roles.add("ROLE_USER");
+        this.roles.add("USER");
     }
 
     public Long getId() { return id; }

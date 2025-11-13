@@ -1,0 +1,62 @@
+Roteiro de Apresentação — Projeto Alexandria (Spring Boot)
+
+Versão: 1.0
+Última atualização: 2025-11-13
+
+1) Contexto e Tema (30s)
+- Tema: Gerenciamento de coleção de livros (Alexandria)
+- Objetivo: autenticação JWT, coleção por usuário, CRUD administrativo de livros e categorias
+
+2) Arquitetura (1min)
+- Spring Boot 3 + JDK 21
+- Segurança: JWT + roles (USER, ADMIN)
+- Persistência: H2/MySQL (profile mysql)
+- Camadas: Controller → Service → Repository → Model/DTO
+
+3) Segurança (1min)
+- Login/Registro em /api/auth
+- Filtro JWT carrega roles e autentica
+- Regras: 
+  - Leitura de livros: pública
+  - Escrita de livros: ADMIN
+  - /api/admin/** protegido por ADMIN
+
+4) CRUD de Livros (3–4min)
+- Endpoints: /api/livros
+  - GET /api/livros — lista
+  - GET /api/livros/{id} — detalhe
+  - POST /api/livros — criar (ADMIN)
+  - PUT /api/livros/{id} — atualizar (ADMIN)
+  - DELETE /api/livros/{id} — excluir (ADMIN)
+- Campos: título, autor, categoria, preço, ISBN (único), imagem da capa
+- Tratamento: 409 para ISBN duplicado; 422 para categoria inválida; 404 para não encontrado
+
+5) Integrações (1–2min)
+- Coleção do usuário usa Livro local (FK)
+- (Opcional) Importação por ISBN de fonte externa e persistência local
+
+6) Tratamento de Erros (1min)
+- GlobalExceptionHandler para validações e credenciais
+- Mensagens padronizadas (status/erro)
+
+7) Testes (1–2min)
+- Testes de Service e Controller (a preencher conforme evolução)
+
+8) Demonstração (3–4min)
+- Registrar e logar
+- Acessar /admin.html e criar livro (título, autor, ISBN, imagem)
+- Listar /api/livros e buscar por ID
+- Atualizar e excluir
+
+9) Próximos passos (30s)
+- Paginação e busca por título/ISBN
+- Importar de API externa como cache local
+- Testes automatizados e documentação OpenAPI
+
+Notas de Execução:
+- H2: ./gradlew.bat bootRun
+- MySQL (Docker): docker-compose up -d; ./gradlew.bat bootRun --args='--spring.profiles.active=mysql'
+- Admin: admin123@gmail.com / Admin@123
+
+Historico de Alterações:
+- 2025-11-13: CRUD de Livros completo; ISBN único; segurança por método HTTP; roteiro criado.

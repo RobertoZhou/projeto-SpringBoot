@@ -86,11 +86,29 @@
     }
     async function getJson(url) {
       const resp = await fetch(url, { headers: authHeaders() });
+      // Se receber 401 ou 403, limpar token e redirecionar
+      if (resp.status === 401 || resp.status === 403) {
+        localStorage.removeItem('auth.token');
+        if (window.ui) {
+          await ui.error('Sessão expirada ou inválida', 'Faça login novamente.');
+        }
+        setTimeout(() => { globalThis.location.href = '/login.html'; }, 1000);
+        return { status: resp.status, body: null };
+      }
       let body; try { body = await resp.json(); } catch { body = await resp.text(); }
       return { status: resp.status, body };
     }
     async function postJson(url, data, method='POST') {
       const resp = await fetch(url, { method, headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(data) });
+      // Se receber 401 ou 403, limpar token e redirecionar
+      if (resp.status === 401 || resp.status === 403) {
+        localStorage.removeItem('auth.token');
+        if (window.ui) {
+          await ui.error('Sessão expirada ou inválida', 'Faça login novamente.');
+        }
+        setTimeout(() => { globalThis.location.href = '/login.html'; }, 1000);
+        return { status: resp.status, body: null };
+      }
       let body; try { body = await resp.json(); } catch { body = await resp.text(); }
       return { status: resp.status, body };
     }

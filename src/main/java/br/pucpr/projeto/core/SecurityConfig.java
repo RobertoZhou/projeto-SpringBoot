@@ -12,6 +12,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.http.HttpMethod;
 
 @Configuration
 @EnableWebSecurity
@@ -26,21 +27,29 @@ public class SecurityConfig {
             .requestMatchers(
                 "/", 
                 "/index.html",
-                         "/home.html",
+                "/home.html",
                 "/login.html",
                 "/register.html",
-                                "/css/**",
-                                "/js/**",
-                                "/img/**",
+                "/admin.html",
+                "/test-auth.html",
+                "/css/**",
+                "/js/**",
+                "/img/**",
                 "/favicon.ico",
                 "/api/auth/register", 
-                "/api/auth/login", 
+                "/api/auth/login",
+                "/api/debug/**",
                 "/h2/**"
             ).permitAll()
-            .requestMatchers("/admin.html").hasRole("ADMIN")
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .anyRequest().authenticated()
-                )
+            // Livros: leitura pública (ou troque para authenticated se quiser)
+            .requestMatchers(HttpMethod.GET, "/api/livros/**").permitAll()
+            // Livros: escrita apenas ADMIN
+            .requestMatchers(HttpMethod.POST, "/api/livros/**").hasRole("ADMIN")
+            .requestMatchers(HttpMethod.PUT, "/api/livros/**").hasRole("ADMIN")
+            .requestMatchers(HttpMethod.DELETE, "/api/livros/**").hasRole("ADMIN")
+            .requestMatchers("/api/admin/**").hasRole("ADMIN")
+            .anyRequest().authenticated()
+        )
         .addFilterBefore(new JwtAuthFilter(jwt, users), UsernamePasswordAuthenticationFilter.class);
 
         http.headers(headers -> headers.frameOptions(frame -> frame.disable()));

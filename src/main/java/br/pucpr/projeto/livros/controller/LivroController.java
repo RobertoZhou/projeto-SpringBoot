@@ -41,6 +41,10 @@ public class LivroController {
     public ResponseEntity<LivroResponse> create(@Valid @RequestBody LivroRequest request) {
         var categoria = categorias.findById(request.categoriaId()).orElse(null);
         if (categoria == null) return ResponseEntity.unprocessableEntity().build();
+        // ISBN único
+        if (request.isbn() != null && !request.isbn().isBlank() && livros.existsByIsbn(request.isbn())) {
+            return ResponseEntity.status(409).build();
+        }
     var livro = new br.pucpr.projeto.livros.model.Livro(
         request.titulo(), request.autor(), categoria, request.preco(), request.isbn()
     );
@@ -63,7 +67,17 @@ public class LivroController {
         livro.setAutor(request.autor());
         livro.setCategoria(categoria);
         livro.setPreco(request.preco());
-        livro.setIsbn(request.isbn());
+        // valida mudança de ISBN
+        if (request.isbn() != null && !request.isbn().isBlank()) {
+            var novoIsbn = request.isbn();
+            var isbnAlterou = (livro.getIsbn() == null) || !livro.getIsbn().equalsIgnoreCase(novoIsbn);
+            if (isbnAlterou && livros.existsByIsbn(novoIsbn)) {
+                return ResponseEntity.status(409).build();
+            }
+            livro.setIsbn(novoIsbn);
+        } else {
+            livro.setIsbn(null);
+        }
         if (request.imagemCapaUrl() != null && !request.imagemCapaUrl().isBlank()) {
             livro.setImagemCapaUrl(request.imagemCapaUrl());
         }
